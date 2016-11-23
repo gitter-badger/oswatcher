@@ -15,6 +15,8 @@ engine = create_engine('postgres://{}:{}@{}/{}'.format(
     config.DB_NAME),
     encoding='utf-8')
 Base = declarative_base(engine)
+Session = sessionmaker(bind=engine)
+session = Session()
 
 class OS(Base):
     __tablename__ = 'os'
@@ -32,23 +34,21 @@ class OSWatcherDB:
 
     def __init__(self, vm_name):
         self.vm_name = vm_name
-        Session = sessionmaker(bind=engine)
-        self.session = Session()
         self.cache_path_ids = []
         # always clear old data for now
         self.clear_old()
         # insert vm_name
         os = OS()
         os.name = vm_name
-        self.session.add(os)
-        self.session.commit()
+        session.add(os)
+        session.commit()
         # get vm_id
         self.os_id = os.id
 
     def clear_old(self):
         # try to get alraedy existing vmid
         try:
-            os_obj = self.session.query(OS).filter(OS.name == self.vm_name).all()[0]
+            os_obj = session.query(OS).filter(OS.name == self.vm_name).all()[0]
         except IndexError as e:
             logging.info('Not already existing')
             return
@@ -56,17 +56,17 @@ class OSWatcherDB:
             os_id = os_obj.id
             logging.info('Clearing Inode Table')
             # clear Inode
-            for inode_obj in self.session.query(Inode).filter(Inode.os_id == os_id):
-                self.session.delete(inode_obj)
+            for inode_obj in session.query(Inode).filter(Inode.os_id == os_id):
+                session.delete(inode_obj)
             logging.info('Clearing Filesystem Table')
             # clear Filesystem
-            for fs_obj in self.session.query(Filesystem).filter(Filesystem.os_id == os_id):
-                self.session.delete(fs_obj)
+            for fs_obj in session.query(Filesystem).filter(Filesystem.os_id == os_id):
+                session.delete(fs_obj)
             logging.info('Clearing OS Table')
             # clear OS
-            for os_obj in self.session.query(OS).filter(OS.id == os_id):
-                self.session.delete(os_obj)
-            self.session.commit()
+            for os_obj in session.query(OS).filter(OS.id == os_id):
+                session.delete(os_obj)
+            session.commit()
 
     def capture(self, node, metadata):
         path_components = []
@@ -104,7 +104,7 @@ class OSWatcherDB:
                     # delete element starting from index i to the end
                     del self.cache_path_ids[i:]
                     # query for ID
-                    fs_obj = self.session.query(Filesystem).filter(Filesystem.os_id == self.os_id, Filesystem.filename == component, Filesystem.path.contains(path_ids)).all()[0]
+                    fs_obj = session.query(Filesystem).filter(Filesystem.os_id == self.os_id, Filesystem.filename == component, Filesystem.path.contains(path_ids)).all()[0]
                     # append id to path_ids
                     path_ids.append(fs_obj.inode)
                     # append new cache entry
@@ -114,7 +114,7 @@ class OSWatcherDB:
             except IndexError:
                 logging.debug("IndexError {}, outside of cache".format(i))
                 # query for ID
-                fs_obj = self.session.query(Filesystem).filter(Filesystem.os_id == self.os_id, Filesystem.filename == component, Filesystem.path.contains(path_ids)).all()[0]
+                fs_obj = session.query(Filesystem).filter(Filesystem.os_id == self.os_id, Filesystem.filename == component, Filesystem.path.contains(path_ids)).all()[0]
                 # append id to path_ids
                 path_ids.append(fs_obj.inode)
                 # append new cache entry
